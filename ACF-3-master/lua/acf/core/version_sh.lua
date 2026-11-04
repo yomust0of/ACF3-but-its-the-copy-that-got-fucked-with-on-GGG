@@ -1,6 +1,11 @@
 local ACF = ACF
 local Realm = SERVER and "Server" or "Client"
 
+-- GGG acf3 freedom edition: what this copy of ACF calls itself.
+-- It is sent to clients inside ACF.Extensions (see the end of this file) so a client can tell if the server runs the same edition.
+ACF.Edition       = "GGG acf3 freedom edition"
+ACF.EditionBranch = "beta"
+
 --- Converts a local time to UTC for comparison
 local function LocalToUTC(time)
 	return os.time(os.date("!*t", time)) or 0 -- WHY WOULD IT EVER BE NIL :(
@@ -186,23 +191,17 @@ end
 
 ACF.AddRepository("ACF-Team", "ACF-3")
 
+-- Marks this copy as the freedom edition. Everything in ACF.Extensions is sent to clients below, so a client can tell what the server runs.
+ACF.Extensions["ACF-3"].Edition       = ACF.Edition
+ACF.Extensions["ACF-3"].EditionBranch = ACF.EditionBranch
+
+-- Upstream asked api.github.com for the newest ACF-3 commit when the server started and told players in chat if they or the server were
+-- out of date. That is removed here: no web request is made and no "out of date" chat notice exists. The notice at the bottom replaces it.
+-- ACF.GetLatestCommit / ACF.GetCommit above are kept, unused, for pointing at our own repository once it is public.
+
 -- Realm specific stuff (so small it probably doesn't need to be in separate files)
 if SERVER then
-	hook.Add("Initialize", "ACF_GetLatestCommit", function()
-		print("[ACF] Fetching latest commit information for all repositories...")
-		for ExtensionName, Extension in pairs(ACF.Extensions) do
-			if not Extension.Version or not Extension.Version.owner then continue end
-
-			ACF.GetLatestCommit(Extension.Version.owner, ExtensionName, Extension.Version.head, function(Commit)
-				Extension.Commit = Commit
-				Extension.Retrieved = true
-				Extension.Commit.code = "Git-" .. Extension.Version.head .. "-" .. Commit.short_sha
-			end)
-		end
-		hook.Remove("Initialize", "ACF_GetLatestCommit")
-	end)
-
-	-- Retrieve most recent commit and current server commit and network to all clients
+	-- Send this server's version info (including the edition marker above) to every player as they load in
 	util.AddNetworkString("ACF_VersionInfo")
 	hook.Add("ACF_OnLoadPlayer", "ACF_SendVersionInfo", function(ply)
 		net.Start("ACF_VersionInfo")
@@ -210,28 +209,62 @@ if SERVER then
 		net.Send(ply)
 	end)
 elseif CLIENT then
+	local EditionName = ACF.Edition .. " " .. ACF.EditionBranch .. " branch" -- "GGG acf3 freedom edition beta branch"
+
 	-- Receive version info from server
 	net.Receive("ACF_VersionInfo", function()
 		ACF.ServerExtensions = util.JSONToTable(net.ReadString())
+	end)
 
-		hook.Add("CreateMove", "ACF Outdated Notice", function(Move)
-			if Move:GetButtons() ~= 0 then
-				-- Determine if client or server versions are out of date with most recent commit and notify.
-				local Messages = ACF.Utilities.Messages
-				for _, ExtensionName in ipairs(ACF.ExtensionOrders) do
-					ClientExtension = ACF.Extensions[ExtensionName]
-					ServerExtension = ACF.ServerExtensions[ExtensionName]
-					if not ClientExtension or not ServerExtension or not ClientExtension.Version or not ServerExtension.Commit then continue end -- Why would this happen :(
-					if ClientExtension.Version.code ~= ServerExtension.Commit.code then
-						Messages.PrintChat("Error", "Your version of " .. ExtensionName .. " is out of date with the latest commit on the server's branch.\nPlease update to avoid potential compatibility issues.")
-					end
-					if ServerExtension.Version.code ~= ServerExtension.Commit.code then
-						Messages.PrintChat("Error", "The server's version of " .. ExtensionName .. " is out of date with the latest commit on its branch.\nPlease notify the server administrator to update to avoid potential compatibility issues.")
-					end
-				end
+	-- Text from the server is shortened and kept to strings before it goes into chat
+	local function Clean(Value)
+		return string.sub(tostring(Value), 1, 60)
+	end
 
-				hook.Remove("CreateMove", "ACF Outdated Notice")
-			end
+	-- Tells the player once, in chat: that they have this edition, whether the server has it too, and which ACF branch the server is on.
+	local function PrintEditionNotice()
+		local Messages = ACF.Utilities.Messages
+		local Server   = ACF.ServerExtensions and ACF.ServerExtensions["ACF-3"]
+
+		Messages.PrintChat("Info", "You have the " .. EditionName .. " installed.")
+
+		if not istable(Server) then
+			Messages.PrintChat("Info", "The server did not send any ACF version info, so it does not have it installed. Its branch is unknown.")
+			return
+		end
+
+		if Server.Edition == nil then
+			Messages.PrintChat("Info", "The server does not have it installed.")
+		elseif Server.Edition == ACF.Edition and Server.EditionBranch == ACF.EditionBranch then
+			Messages.PrintChat("Info", "The server has it installed too.")
+		else
+			Messages.PrintChat("Info", "The server has the " .. Clean(Server.Edition) .. " " .. Clean(Server.EditionBranch) .. " branch installed, which is not the same as yours.")
+		end
+
+		-- The branch is only real for git (and workshop, which is always master) installs. A zip install has no way to tell.
+		local Version = istable(Server.Version) and Server.Version or {}
+		local Code    = isstring(Version.code) and Version.code or ""
+
+		if string.sub(Code, 1, 4) == "Git-" and isstring(Version.head) then
+			Messages.PrintChat("Info", "The server's ACF branch is " .. Clean(Version.head) .. " (" .. Clean(Code) .. ").")
+		else
+			Messages.PrintChat("Info", "The server's ACF branch could not be told (it is not a git install).")
+		end
+	end
+
+	-- Shown on the player's first key press, the same moment the old out-of-date notice used, so the chat is actually on screen.
+	-- It waits up to 10 seconds for the server's info; a server that never sends any is reported as such.
+	hook.Add("InitPostEntity", "ACF Edition Notice", function()
+		local Start = SysTime()
+
+		hook.Add("CreateMove", "ACF Edition Notice", function(Move)
+			if Move:GetButtons() == 0 then return end
+			if not ACF.ServerExtensions and SysTime() - Start < 10 then return end
+
+			hook.Remove("CreateMove", "ACF Edition Notice")
+			PrintEditionNotice()
 		end)
+
+		hook.Remove("InitPostEntity", "ACF Edition Notice")
 	end)
 end

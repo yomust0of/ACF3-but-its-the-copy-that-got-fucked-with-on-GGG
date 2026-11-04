@@ -207,7 +207,13 @@ do -- ACF global vars
 	ACF.LengthToTime       = 0.025 -- Conversion of projectile length to time -- Emulating the added difficulty of manipulating a longer projectile
 
 	-- External and Terminal Ballistics
-	ACF.DragDiv              = 80 -- Drag fudge factor
+	-- Bullet drag constant. The drag formula (a = DragCoef * v^2 / DragDiv, v in inches/s) is the real one, a = 0.5 * rho * Cd * (A/m) * v^2,
+	-- with every constant folded into this one number: DragDiv = 1 / (0.5 * 1.225 kg/m3 * 0.0254 m/in * Cd) = 64.3 / Cd.
+	-- Upstream used 80, which is Cd 0.80 at every speed (a flat-faced cylinder). Real rifle/MG bullets are Cd ~0.30 at Mach 2-3, so
+	-- stock bullets lost speed 2-6x too fast. 200 is Cd 0.32, within ~2% of real 7.62 / .50 speeds out to 500 m (see READ ME, Change 4).
+	ACF.DragDiv              = 200
+	-- Missiles/bombs/rockets (acf_missile) use hand-tuned drag values that were balanced against the old 80, so they keep it.
+	ACF.MissileDragDiv       = 80
 	ACF.Scale                = 1 -- Scale factor for ACF in the game world
 	ACF.Gravity              = Vector(0, 0, -GetConVar("sv_gravity"):GetInt())
 

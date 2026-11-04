@@ -74,7 +74,16 @@ function Ballistics.CalcBulletFlight(Bullet)
 
 	local DeltaTime  = ClockTime - Bullet.LastThink
 	local Flight     = Bullet.Flight
-	local Drag       = Flight:GetNormalized() * (Bullet.DragCoef * Flight:LengthSqr()) / ACF.DragDiv
+	local DragK      = Bullet.DragK
+
+	-- DragCoef and ACF.DragDiv do not change while a bullet is in the air (only its speed does), so they are divided once on the
+	-- bullet's first tick and the result is kept on the bullet, instead of being divided again on every tick.
+	if not DragK then
+		DragK        = Bullet.DragCoef / ACF.DragDiv
+		Bullet.DragK = DragK
+	end
+
+	local Drag       = Flight:GetNormalized() * (DragK * Flight:LengthSqr())
 	local Accel      = Bullet.Accel or ACF.Gravity
 	local Correction = 0.5 * (Accel - Drag) * DeltaTime
 

@@ -252,7 +252,7 @@ local function CalcFlight(Missile)
 	-- debugoverlay.Line(Missile.ACF_Position, Missile.ACF_Position + VelNorm * 10, 10, Color(0, 0, 255), true)
 	-- debugoverlay.Line(Missile.ACF_Position, Missile.ACF_Position + Up * 10, 10, Color(255, 0, 0), true)
 	-- debugoverlay.Line(Missile.ACF_Position, Missile.ACF_Position + Dir * 10, 10, Color(255, 0, 0), true)
-	local Drag      = LastVel * (Missile.DragCoef * LastSpeed) / ACF.DragDiv * ACF.Scale / Missile.Mass
+	local Drag      = LastVel * (Missile.DragCoef * LastSpeed) / ACF.MissileDragDiv * ACF.Scale / Missile.Mass
 	local Vel       = LastVel + (GravityVector + Thrust + Lift - Drag) * DeltaTime
 	local EndPos    = Pos + Vel * DeltaTime
 
