@@ -74,12 +74,22 @@ do -- Spawn and Update functions -----------------------
 			local AliasData = Compatibility.Gearboxes.CheckGroupItem(Data.Gearbox)
 
 			if AliasData then
-				Data.Gearbox = AliasData.ID
+				-- Only an old (pre-scalable) gearbox gets in here, so this doubles as the "this is an old dupe" flag.
+				-- ACF.MakeGearbox puts it on the entity, and gearbox_convert_sv.lua uses it once the paste has finished.
+				Data.PreScalableID = Data.Gearbox
+				Data.Gearbox       = AliasData.ID
 
-				if AliasData.Overrides then
-					for K, V in pairs(AliasData.Overrides) do
+				local Overrides = AliasData.Overrides
+
+				if Overrides then
+					for K, V in pairs(Overrides) do
 						Data[K] = V
 					end
+
+					-- The copy above leaves these under the alias' names (Scale, MaxGear), but the rest of this function and
+					-- UpdateGearbox read them as GearboxScale and GearAmount, so the old size and gear count were being dropped.
+					Data.GearboxScale = Overrides.Scale or Data.GearboxScale
+					Data.GearAmount   = Overrides.MaxGear or Data.GearAmount
 				end
 
 				local GroupID = Compatibility.Gearboxes.CheckGroup(AliasData.GroupID) or AliasData.GroupID
@@ -93,6 +103,9 @@ do -- Spawn and Update functions -----------------------
 		end
 
 		local Gearbox = Gearboxes.GetItem(Class.ID, Data.Gearbox)
+
+		-- Old gear ratios are 0-1 and divided the torque, new ones are 1-10 and multiply it, so old dupes need them flipped
+		local Invert = Gearbox.InvertGearRatios or Data.InvertGearRatios
 
 		do -- Scale verification
 			local GearboxScale = Gearbox and Gearbox.Scale or Data.GearboxScale
@@ -136,7 +149,7 @@ do -- Spawn and Update functions -----------------------
 				end
 
 				-- Invert pre-scalable gear ratios (and try not to reconvert them infinitely)
-				if Gearbox.InvertGearRatios and Gear ~= 0 and abs(Gear) < 1 then
+				if Invert and Gear ~= 0 and abs(Gear) < 1 then
 					Gear = math.Round(1 / Gear, 2)
 				end
 
@@ -156,13 +169,21 @@ do -- Spawn and Update functions -----------------------
 			end
 
 			-- Invert pre-scalable gear ratios (and try not to reconvert them infinitely)
-			if Gearbox.InvertGearRatios and Final ~= 0 and abs(Final) < 1 then
+			if Invert and Final ~= 0 and abs(Final) < 1 then
 				Final = math.Round(1 / Final, 2)
 			end
 
 			local Final = ACF.ConvertGearRatio(Final, ShouldConvertToLegacy)
 
 			Data.FinalDrive = Clamp(Final, ACF.MinGearRatio, ACF.MaxGearRatio)
+		end
+
+		do -- Reverse gear (automatics only use it, the class verifies it below, so it has to be flipped before that)
+			local Reverse = Invert and ACF.CheckNumber(Data.Reverse, ACF.CheckNumber(Data.Gear8))
+
+			if Reverse and Reverse ~= 0 and abs(Reverse) < 1 then
+				Data.Reverse = math.Round(1 / Reverse, 2)
+			end
 		end
 
 		do -- External verifications
@@ -380,6 +401,9 @@ do -- Spawn and Update functions -----------------------
 		Entity.DataStore      = Entities.GetArguments("acf_gearbox")
 
 		duplicator.ClearEntityModifier(Entity, "mass")
+
+		-- Set only for old (pre-scalable) gearboxes, see VerifyData. Not saved in dupes, gearbox_convert_sv.lua clears it.
+		Entity.PreScalableID = Data.PreScalableID
 
 		UpdateGearbox(Entity, Data, Class, Gearbox)
 
