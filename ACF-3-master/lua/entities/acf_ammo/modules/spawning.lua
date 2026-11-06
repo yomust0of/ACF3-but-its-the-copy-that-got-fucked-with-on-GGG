@@ -36,6 +36,27 @@ end
 
 do -- Spawn/Update/Remove
 	local function VerifyData(Data)
+		-- Crates from the very first ACF versions (before October 2020) were fixed models, and kept their weapon, ammo type and
+		-- size under other names. This is what ACF itself did with them when it went to scalable crates, and what this copy
+		-- lost on the way: without it these crates came out as 24x24x24 boxes of 50mm cannon AP.
+		if isstring(Data.RoundId) and not isstring(Data.Weapon) then
+			local OldCrate = ACF.Compatibility.AmmoCrates and ACF.Compatibility.AmmoCrates[Data.Id]
+
+			Data.Weapon   = Data.RoundId
+			Data.AmmoType = Data.RoundType or "AP"
+
+			if OldCrate then -- The old crate model's size, and where its origin was compared to the middle of the box
+				Data.Size   = Vector(OldCrate.Size)
+				Data.Offset = Vector(OldCrate.Offset)
+			else
+				local X = ACF.CheckNumber(tonumber(Data.RoundData11), 24)
+				local Y = ACF.CheckNumber(tonumber(Data.RoundData12), 24)
+				local Z = ACF.CheckNumber(tonumber(Data.RoundData13), 24)
+
+				Data.Size = Vector(X, Y, Z)
+			end
+		end
+
 		if not isvector(Data.Size) then
 			local X = ACF.CheckNumber(Data.AmmoSizeX or Data.CrateSizeX, 24)
 			local Y = ACF.CheckNumber(Data.AmmoSizeY or Data.CrateSizeY, 24)
@@ -72,12 +93,26 @@ do -- Spawn/Update/Remove
 				end
 			end
 
-			-- No class exists!
+			-- Scalable guns whose whole class is gone (smoothbore, autoloaded cannon): the class that replaced it, same caliber
 			if not Class then
+				local Compat   = ACF.Compatibility[Data.Destiny]
+				local NewGroup = Compat and Compat.CheckGroup and Compat.CheckGroup(Data.Weapon)
+
+				if NewGroup then
+					Data.Weapon = NewGroup
+
+					Class = Classes.GetGroup(Source, Data.Weapon)
+				end
+			end
+
+			-- No class exists! A cannon, with the caliber the old gun had when that can be found (it used to always become 50mm)
+			if not Class then
+				local OldCaliber = tonumber(string.match(tostring(Data.Weapon), "^([%d%.]+)mm")) or tonumber(Data.Caliber)
+
 				Class = Weapons.Get("C")
 				Data.Destiny = "Weapons"
 				Data.Weapon  = "C"
-				Data.Caliber = Data.caliber or 50
+				Data.Caliber = OldCaliber or 50
 			end
 
 			do
@@ -92,6 +127,15 @@ do -- Spawn/Update/Remove
 						Data.Caliber = ACF.CheckNumber(Weapon.Caliber, 50)
 					end
 				end
+			end
+
+			-- A scalable class only has the calibers between its limits. Old guns that came from a bigger class (240mm howitzer) or
+			-- have no caliber saved get the nearest one, the same as the gun itself does. Before this the crate kept the old caliber
+			-- and could not be linked to the gun.
+			if Class.IsScalable and Class.Caliber then
+				local Bounds = Class.Caliber
+
+				Data.Caliber = Clamp(ACF.CheckNumber(Data.Caliber, Bounds.Base), Bounds.Min, Bounds.Max)
 			end
 
 			local Ammo = AmmoTypes.Get(Data.AmmoType)
@@ -117,6 +161,35 @@ do -- Spawn/Update/Remove
 				hook.Run("ACF_OnVerifyData", "acf_ammo", Data, Class, Ammo)
 			end
 		end
+	end
+
+	-- Crates that have no projectile counts yet (every dupe from before cartridge-scale crates, which only had a box size) get
+	-- their counts worked out from that size. ACF's own way takes the biggest counts that still fit inside the old box, so the box
+	-- always shrinks, by up to one round on every axis. This tries the counts around that one and takes the combination that gives
+	-- a box closest to the old one, so old boxes keep about the size they had.
+	-- Rounds packed in a honeycomb fit up to 1 / 0.866 times as many along the width as square ones, so on that axis the counts
+	-- tried go from the square fit to a bit past the honeycomb fit. On every axis, a count lower than what fits is never closer.
+	local function GetNearestCounts(Size, Class, Data, Bullet)
+		local FitX      = ACF.GetProjectileCountsFromCrateSize(Size, Class, Data, Bullet)
+		local RoundSize = ACF.GetRoundProperties(Class, Data, Bullet)
+		local SquareY   = math.max(1, Floor(Size.y / RoundSize.y))
+		local SquareZ   = math.max(1, Floor(Size.z / RoundSize.z))
+		local BestX, BestY, BestZ, BestScore
+
+		for X = FitX, FitX + 1 do
+			for Y = SquareY, math.ceil(SquareY * 1.16) + 1 do
+				for Z = SquareZ, SquareZ + 1 do
+					local Box   = ACF.GetCrateSizeFromProjectileCounts(X, Y, Z, Class, Data, Bullet)
+					local Score = math.abs(Box.x - Size.x) / Size.x + math.abs(Box.y - Size.y) / Size.y + math.abs(Box.z - Size.z) / Size.z
+
+					if not BestScore or Score < BestScore then -- On a tie the smaller count stays
+						BestX, BestY, BestZ, BestScore = X, Y, Z, Score
+					end
+				end
+			end
+		end
+
+		return BestX, BestY, BestZ
 	end
 
 	local function UpdateCrateSize(Entity, Data, Class, _, Ammo)
@@ -150,7 +223,7 @@ do -- Spawn/Update/Remove
 			local cz = tonumber(Data.CrateProjectilesZ)
 
 			if not (cx and cy and cz) then
-				cx, cy, cz = ACF.GetProjectileCountsFromCrateSize(Data.Size, Class, Data, Bullet)
+				cx, cy, cz = GetNearestCounts(Data.Size, Class, Data, Bullet)
 			end
 
 			cx = math.max(1, Floor(cx or 3))

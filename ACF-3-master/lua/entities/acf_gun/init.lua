@@ -288,11 +288,26 @@ do -- Spawn and Update functions --------------------------------
 			end
 		end
 
+		-- Scalable guns whose whole class is gone (the smoothbore and the autoloaded cannon): the class that replaced it, same caliber.
+		-- This lookup used to exist but nothing ever called it, so those guns fell through to the 50mm cannon below.
 		if not Class then
+			local NewGroup = Compatibility.Weapons.CheckGroup(Data.Weapon)
+
+			if NewGroup then
+				Data.Weapon = NewGroup
+
+				Class = Classes.GetGroup(Weapons, Data.Weapon)
+			end
+		end
+
+		if not Class then
+			-- Last resort: a cannon. It keeps the caliber the old gun had when that can be found, instead of always becoming 50mm
+			local OldCaliber = tonumber(string.match(tostring(Data.Weapon), "^([%d%.]+)mm")) or tonumber(Data.Caliber)
+
 			Class = Weapons.Get("C")
 			Data.Destiny = "Weapons"
 			Data.Weapon  = "C"
-			Data.Caliber = 50
+			Data.Caliber = OldCaliber or 50
 		end
 
 		-- Verifying and clamping caliber value

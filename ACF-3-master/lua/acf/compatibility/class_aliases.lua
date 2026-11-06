@@ -68,6 +68,16 @@ do
     Weapons_RegisterOldGunItem("100mmC")
     Weapons_RegisterOldGunItem("120mmC")
     Weapons_RegisterOldGunItem("140mmC")
+    Weapons_RegisterOldGunItem("170mmC") -- Was missing, so it came out as a 50mm cannon
+
+    -- Autoloaded cannons. The AL class was removed in December 2025 (the autoloader is its own entity now), so they become
+    -- plain cannons of the same caliber. Before this they all came out as 50mm cannons.
+    Weapons_RegisterGroupChange("C", "AL") -- The scalable "AL" class, it kept its caliber in Data.Caliber
+    Weapons_RegisterOldGunItem("75mmAL", "C")
+    Weapons_RegisterOldGunItem("100mmAL", "C")
+    Weapons_RegisterOldGunItem("120mmAL", "C")
+    Weapons_RegisterOldGunItem("140mmAL", "C")
+    Weapons_RegisterOldGunItem("170mmAL", "C")
 
     -- Grenade launchers
     Weapons_RegisterOldGunItem("40mmGL")
@@ -75,14 +85,18 @@ do
 
     -- Howitzers
     Weapons_RegisterOldGunItem("75mmHW")
+    Weapons_RegisterOldGunItem("105mmHW") -- Was missing
     Weapons_RegisterOldGunItem("122mmHW")
     Weapons_RegisterOldGunItem("155mmHW")
     Weapons_RegisterOldGunItem("203mmHW")
+    Weapons_RegisterOldGunItem("240mmHW") -- Was missing. Bigger than the howitzer class goes now, so it is cut down to the biggest one
+    Weapons_RegisterOldGunItem("290mmHW") -- Same
 
     -- Light autocannons
     Weapons_RegisterOldGunItem("20mmHMG", "LAC")
     Weapons_RegisterOldGunItem("30mmHMG", "LAC")
     Weapons_RegisterOldGunItem("40mmHMG", "LAC")
+    Weapons_RegisterOldGunItem("13mmHMG", "MG") -- Was missing. Too small for the light autocannon class, the machinegun class has 13mm
 
     -- Machineguns
     Weapons_RegisterOldGunItem("7.62mmMG")
@@ -97,6 +111,7 @@ do
     Weapons_RegisterOldGunItem("120mmM", "MO")
     Weapons_RegisterOldGunItem("150mmM", "MO")
     Weapons_RegisterOldGunItem("200mmM", "MO")
+    Weapons_RegisterOldGunItem("280mmM", "MO") -- Was missing
 
     -- Rotary autocannons
     Weapons_RegisterOldGunItem("14.5mmRAC")
