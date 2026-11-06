@@ -135,6 +135,10 @@ do -- Data persisting on either realm
 			for Key, Stored in pairs(Saved) do
 				if Keys[Key] == nil then continue end
 
+				-- The default changed since this was saved and the saved value is just the old default (it was never changed by
+				-- the player), so it takes the new default. Without this a new default would never reach anyone who had played before.
+				if Stored.Default ~= nil and Stored.Default == Stored.Value and Stored.Default ~= Keys[Key] then continue end
+
 				if Stored.Value ~= "nil" then
 					SetFunction(Key, Stored.Value)
 				end

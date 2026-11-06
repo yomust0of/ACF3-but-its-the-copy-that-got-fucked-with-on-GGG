@@ -963,6 +963,12 @@ do -- Movement -----------------------------------------
 		local DoubleDiff = SelfTbl.DoubleDiff
 		local SteerRate  = SelfTbl.SteerRate
 
+		-- Reversing nerf (server setting, see ACF.DefineSetting("ReversingNerf") in globals.lua). Stock ACF only asks for torque for a
+		-- wheel the engine could be the one turning at this speed (the check below), so a wheel that still turns the other way, for
+		-- example forward right after shifting into reverse, gets nothing until it has slowed down to the engine's RPM. With the nerf
+		-- off (the default here) a wheel turning against the gear is given torque too, the engine pushes it back through zero.
+		local NoNerf = not ACF.ReversingNerf
+
 		for Wheel, Link in pairs(SelfTbl.Wheels) do
 			Link.ReqTq = 0
 
@@ -985,7 +991,7 @@ do -- Movement -----------------------------------------
 						end
 					end
 
-					if abs(InputRPM * Multiplier) > abs(RPM) then -- removing this check causes the wheels to constantly invert their rotation
+					if abs(InputRPM * Multiplier) > abs(RPM) or (NoNerf and InputRPM * RPM < 0) then -- removing this check causes the wheels to constantly invert their rotation
 						Link.ReqTq = (InputRPM * Multiplier - RPM) * InputInertia * Clutch
 						TotalReqTq = TotalReqTq + abs(Link.ReqTq)
 					end

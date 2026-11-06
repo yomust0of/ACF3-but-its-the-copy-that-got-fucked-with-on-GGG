@@ -414,6 +414,9 @@ do -- ACF global vars
 	ACF.GearboxTorqueScale = 3 -- The exponent to determine the gearbox's torque in proportion to its scale
 	-- The arbitrary multiplier for the final amount of torque; TODO: we should probably implement this in a better way
 	ACF.DefineSetting("TorqueMult", 5, "Arbitrary torque multiplier has been set to a factor of %.2f. Stopgap measure until a future engine update.", ACF.FloatDataCallback(0, 10, 2))
+	-- The reversing nerf: no torque for a wheel that turns against the gear faster than the engine could turn it (stock ACF always does this).
+	-- Off here by default, so reversing at speed is instant; the gearbox reads ACF.ReversingNerf in ENT:Calc.
+	ACF.DefineSetting("ReversingNerf", false, "Reversing nerf has been %s.", ACF.BooleanDataCallback(), false)
 	ACF.MinGearRatio       = -10 -- The minimum value that a gear's ratio can be set to
 	ACF.MaxGearRatio       = 10 -- The maximum value that a gear's ratio can be set to
 	ACF.MinCVTRatio        = 1 -- The minimum value that a CVT's ratio can be set to

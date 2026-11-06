@@ -188,6 +188,9 @@ do -- Serverside settings
 		Base:AddSlider("#acf.menu.settings.general.torque_multiplier"):        LinkToServerData("TorqueMult")
 			Base:AddHelp("#acf.menu.settings.general.torque_multiplier_desc")
 
+		Base:AddCheckBox("#acf.menu.settings.general.reversing_nerf"):         LinkToServerData("ReversingNerf")
+			Base:AddHelp("#acf.menu.settings.general.reversing_nerf_desc")
+
 		Base:AddSlider("#acf.menu.settings.general.smoke_wind"):               LinkToServerData("SmokeWind")
 			Base:AddHelp("#acf.menu.settings.general.smoke_wind_desc")
 	end)

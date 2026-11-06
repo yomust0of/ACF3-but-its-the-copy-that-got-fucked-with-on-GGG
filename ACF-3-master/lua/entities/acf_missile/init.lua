@@ -503,6 +503,16 @@ function ENT:UpdateModel(Model)
 	self:PhysicsInit(SOLID_VPHYSICS)
 	self:SetMoveType(MOVETYPE_VPHYSICS)
 	self:SetCollisionGroup(COLLISION_GROUP_WORLD)
+
+	-- PhysicsInit makes a new physics object, which weighs whatever the model weighs by default. CFW counted this missile at
+	-- ForcedMass, and when it leaves the rack it takes away what the physics object weighs at that moment. Rockets change model
+	-- when they launch, so every shot took (model weight - ForcedMass) out of the contraption's mass for good, twice the weight
+	-- of the rocket for the usual 10 versus 30. So the weight is put back on the new physics object every time.
+	local PhysObj = self:GetPhysicsObject()
+
+	if IsValid(PhysObj) and self.ForcedMass then
+		PhysObj:SetMass(self.ForcedMass)
+	end
 end
 
 function ENT:Launch(Delay, IsMisfire)

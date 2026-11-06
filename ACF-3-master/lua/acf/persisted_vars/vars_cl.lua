@@ -23,5 +23,5 @@ ACF.PersistClientData("SupplySizeY", 24)
 ACF.PersistClientData("SupplySizeZ", 24)
 ACF.PersistClientData("SupplyShape", "Box")
 
--- Gearbox
-ACF.PersistClientData("GearboxLegacyRatio", false)
+-- Gearbox. Legacy ratios (driven / driver, 0 to 1) are the default here, stock ACF starts with the realistic ones (false)
+ACF.PersistClientData("GearboxLegacyRatio", true)
