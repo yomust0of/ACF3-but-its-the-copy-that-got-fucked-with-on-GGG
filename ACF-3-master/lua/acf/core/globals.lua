@@ -339,6 +339,7 @@ do -- ACF global vars
 		acf_groundloader = true,
 		acf_supply = true,
 		acf_waterjet = true,
+		acf_thrustnozzle = true,
 		acf_autoloader = true,
 		prop_physics = true,
 		prop_vehicle_prisoner_pod = true

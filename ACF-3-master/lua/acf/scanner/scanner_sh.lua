@@ -151,6 +151,7 @@ DefineScannerType("acf_controller",            "ACF Controller",            Colo
 
 DefineScannerType("acf_supply",                "ACF Supply Crate",          Color(255, 171, 164), "SC",  {drawModelOverlay = true})
 DefineScannerType("acf_waterjet",              "ACF Waterjet",              Color(160, 236, 255), "WJ",  {drawModelOverlay = true})
+DefineScannerType("acf_thrustnozzle",          "ACF VTOL Jet Thruster",     Color(190, 225, 255), "VJ",  {drawModelOverlay = true})
 DefineScannerType("acf_autoloader",            "ACF Autoloader",            Color(168, 39, 27),   "AL",  {drawModelOverlay = true})
 DefineScannerType("acf_receiver",              "ACF Warning Receiver",      Color(241, 255, 164), "WR",  {drawModelOverlay = true})
 DefineScannerType("acf_groundloader",          "ACF Ground Loader",         Color(255, 166, 0),   "GL",  {})

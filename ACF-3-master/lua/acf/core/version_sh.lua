@@ -1,10 +1,12 @@
 local ACF = ACF
 local Realm = SERVER and "Server" or "Client"
 
--- GGG acf3 freedom edition: what this copy of ACF calls itself.
--- It is sent to clients inside ACF.Extensions (see the end of this file) so a client can tell if the server runs the same edition.
-ACF.Edition       = "GGG acf3 freedom edition"
-ACF.EditionBranch = "beta"
+-- GGG ACF3 "Freedom Edition": what this copy of ACF calls itself.
+-- ACF.Edition is the id. It is sent to clients inside ACF.Extensions (see the end of this file) so a client can tell if the server runs
+-- the same edition, which is why it keeps the spelling earlier copies of this edition already send. ACF.EditionDisplay is how chat writes it.
+ACF.Edition        = "GGG acf3 freedom edition"
+ACF.EditionDisplay = 'GGG ACF3 "Freedom Edition"'
+ACF.EditionBranch  = "beta"
 
 --- Converts a local time to UTC for comparison
 local function LocalToUTC(time)
@@ -209,7 +211,7 @@ if SERVER then
 		net.Send(ply)
 	end)
 elseif CLIENT then
-	local EditionName = ACF.Edition .. " " .. ACF.EditionBranch .. " branch" -- "GGG acf3 freedom edition beta branch"
+	local EditionName = ACF.EditionDisplay .. " " .. ACF.EditionBranch .. " branch" -- GGG ACF3 "Freedom Edition" beta branch
 
 	-- Receive version info from server
 	net.Receive("ACF_VersionInfo", function()
@@ -238,7 +240,10 @@ elseif CLIENT then
 		elseif Server.Edition == ACF.Edition and Server.EditionBranch == ACF.EditionBranch then
 			Messages.PrintChat("Info", "The server has it installed too.")
 		else
-			Messages.PrintChat("Info", "The server has the " .. Clean(Server.Edition) .. " " .. Clean(Server.EditionBranch) .. " branch installed, which is not the same as yours.")
+			-- Same edition on another branch is written the same way as above; anything else is text from the server and is shown as it is
+			local Name = Server.Edition == ACF.Edition and ACF.EditionDisplay or Clean(Server.Edition)
+
+			Messages.PrintChat("Info", "The server has the " .. Name .. " " .. Clean(Server.EditionBranch) .. " branch installed, which is not the same as yours.")
 		end
 
 		-- The branch is only real for git (and workshop, which is always master) installs. A zip install has no way to tell.

@@ -62,11 +62,22 @@ function ENT:ConfigureLuaSeat(Pod, Player)
 	WireLib.TriggerOutput(self, "Driver", NULL)
 end
 
--- Show/Hide physical entities when entering/existing seats, if the contraption has auto treads (networking optimization)
+-- Show/Hide physical entities when entering/exiting seats, if the contraption has auto treads (networking optimization)
+--
+-- READ THIS BEFORE TOUCHING IT: Entity:SetNoDraw() called on the SERVER sets EF_NODRAW, and that flag is replicated to
+-- EVERY client, not just the driver. Hiding the wheels/base prop this way is only correct when the track entity draws
+-- them itself. If it doesn't, everyone on the server sees a tank with no wheels and no base prop for as long as someone
+-- is seated. Because of that this is strictly opt-in: it only runs for a contraption that has an ACF baseplate with
+-- "NetworkOptimization" enabled (it now defaults to disabled).
 local ShouldHidePhysicalIfExists = {
 	["sent_tanktracks_legacy"] = true,
 	["sent_tanktracks_auto"] = true,
 }
+
+-- Every entity this module has NoDrawn. Used to undo exactly what we did (and nothing else), no matter how the
+-- contraption changed while the driver was seated (wheel unwelded, seat deleted, contraption split, etc.).
+-- Note: this is lost on a lua refresh; re-sit and leave the seat to clear any stragglers.
+local HiddenEntities = {}
 
 -- Iterates over the contraption's unparented, physical entities, optionally skipping ACF entities
 -- (used to avoid nodrawing things like the baseplate itself, which are still physical)
@@ -81,17 +92,60 @@ local function ForEachUnparentedEntity(Contraption, SkipACFEntities, Callback)
 	end
 end
 
-local function ShowHidePhysicalEntities(Contraption, NoDraw)
+-- Opt-in check. The baseplate MUST exist and have the option enabled.
+-- (Previously a contraption with no baseplate fell through this check and got its props hidden anyway.)
+local function ShouldOptimize(Contraption)
 	local Base = Contraption.ACF_Baseplate
-	if IsValid(Base) and not Base:ACF_GetUserVar("NetworkOptimization") then return end
+	if not IsValid(Base) or not Base:ACF_GetUserVar("NetworkOptimization") then return false end
 
-	local ShouldRun = false
-	for _, Class in ipairs(table.GetKeys(Contraption.entsbyclass)) do
-		if ShouldHidePhysicalIfExists[Class] then ShouldRun = true end
+	for Class in pairs(ShouldHidePhysicalIfExists) do
+		if Contraption:ContainsClass(Class) then return true end
 	end
-	if not ShouldRun then return end
 
-	ForEachUnparentedEntity(Contraption, true, function(ent) ent:SetNoDraw(NoDraw) end)
+	return false
+end
+
+-- True if anyone other than Leaver is still seated somewhere in the contraption (driver + gunner, for example)
+local function HasOtherOccupants(Contraption, Leaver)
+	if not Contraption.ACF_TrackPlayers then return false end
+
+	for Ply in ACF.PlayersInContraptionIterator(Contraption) do
+		if Ply ~= Leaver and IsValid(Ply:GetVehicle()) then return true end
+	end
+
+	return false
+end
+
+local function RestoreEntity(ent)
+	HiddenEntities[ent] = nil
+
+	if IsValid(ent) then ent:SetNoDraw(false) end
+end
+
+local function HidePhysicalEntities(Contraption)
+	if not ShouldOptimize(Contraption) then return end
+
+	ForEachUnparentedEntity(Contraption, true, function(ent)
+		-- Leave anything that was already invisible alone, so we never "restore" something we didn't hide
+		if ent:IsEffectActive(EF_NODRAW) then return end
+
+		HiddenEntities[ent] = true
+		ent:SetNoDraw(true)
+	end)
+end
+
+-- Contraption may be nil (the seat is no longer part of one); in that case only orphaned entities are restored.
+local function ShowPhysicalEntities(Contraption, Leaver)
+	if next(HiddenEntities) == nil then return end
+	if Contraption and HasOtherOccupants(Contraption, Leaver) then return end
+
+	for ent in pairs(HiddenEntities) do
+		if not IsValid(ent) then
+			HiddenEntities[ent] = nil
+		elseif ent:CFW_GetContraption() == Contraption then
+			RestoreEntity(ent)
+		end
+	end
 end
 
 local function UnfreezePhysicalEntities(Contraption)
@@ -105,16 +159,23 @@ local function UnfreezePhysicalEntities(Contraption)
 end
 
 hook.Add("PlayerEnteredVehicle", "ACFHidePhysicalEntities", function(_, Veh)
-	if Veh:CFW_GetContraption() then
-		ShowHidePhysicalEntities(Veh:CFW_GetContraption(), true)
-		UnfreezePhysicalEntities(Veh:CFW_GetContraption())
-	end
+	local Contraption = Veh:CFW_GetContraption()
+	if not Contraption then return end
+
+	HidePhysicalEntities(Contraption)
+	UnfreezePhysicalEntities(Contraption)
 end)
 
-hook.Add("PlayerLeaveVehicle", "ACFHidePhysicalEntities", function(_, Veh)
-	if Veh:CFW_GetContraption() then
-		ShowHidePhysicalEntities(Veh:CFW_GetContraption(), false)
-	end
+hook.Add("PlayerLeaveVehicle", "ACFHidePhysicalEntities", function(Ply, Veh)
+	-- Don't bail when the seat has no contraption: it may have been unwelded/removed while hidden props are still tracked
+	local Contraption = IsValid(Veh) and Veh:CFW_GetContraption() or nil
+
+	ShowPhysicalEntities(Contraption, Ply)
+end)
+
+-- A hidden entity that leaves its contraption (unwelded, removed) can no longer be restored via the seat, so do it now
+hook.Add("cfw.contraption.entityRemoved", "ACFHidePhysicalEntities", function(_, Ent)
+	if HiddenEntities[Ent] then RestoreEntity(Ent) end
 end)
 
 -- Exposes Pod to util_sh and other things with a more unique name

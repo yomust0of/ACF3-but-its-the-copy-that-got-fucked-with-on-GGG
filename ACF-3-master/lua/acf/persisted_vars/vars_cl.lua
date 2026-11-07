@@ -25,3 +25,6 @@ ACF.PersistClientData("SupplyShape", "Box")
 
 -- Gearbox. Legacy ratios (driven / driver, 0 to 1) are the default here, stock ACF starts with the realistic ones (false)
 ACF.PersistClientData("GearboxLegacyRatio", true)
+
+-- VTOL jet thruster: the sound file typed in its menu (same default as SoundDefault in lua\entities\acf_thrustnozzle\tuning.lua)
+ACF.PersistClientData("NozzleSoundPath", "ambient/machines/spin_loop.wav")

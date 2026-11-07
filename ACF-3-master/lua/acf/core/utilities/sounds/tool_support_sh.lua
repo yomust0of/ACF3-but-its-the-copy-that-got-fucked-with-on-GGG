@@ -145,3 +145,30 @@ Sounds.acf_waterjet = {
 		Ent:UpdateSound()
 	end
 }
+
+-- VTOL jet thruster (it has its own sound variable names, see lua\entities\acf_thrustnozzle\shared.lua)
+Sounds.acf_thrustnozzle = {
+	GetSound = function(Ent)
+		return {
+			Sound  = Ent:ACF_GetUserVar("NozzleSoundPath"),
+			Pitch  = Ent:ACF_GetUserVar("NozzleSoundPitch"),
+			Volume = Ent:ACF_GetUserVar("NozzleSoundVolume"),
+		}
+	end,
+	SetSound = function(Ent, SoundData)
+		local Sound = SoundData.Sound:Trim():lower()
+
+		Ent:ACF_SetUserVar("NozzleSoundPath", Sound)
+		Ent:ACF_SetUserVar("NozzleSoundPitch", SoundData.Pitch)
+		Ent:ACF_SetUserVar("NozzleSoundVolume", SoundData.Volume)
+
+		Ent:UpdateSound()
+	end,
+	ResetSound = function(Ent)
+		Ent:ACF_SetUserVar("NozzleSoundPath", ACF.ThrustNozzle.SoundDefault)
+		Ent:ACF_SetUserVar("NozzleSoundPitch", 1)
+		Ent:ACF_SetUserVar("NozzleSoundVolume", 0.5)
+
+		Ent:UpdateSound()
+	end
+}
