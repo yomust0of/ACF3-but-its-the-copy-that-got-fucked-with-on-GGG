@@ -27,6 +27,16 @@ ENT.ACF_WireInputs = {
     "Pitch (Swings the exhaust toward the thruster's front for plus, back for minus, in degrees. Limited to the maximum vector angle.)",
     "Yaw (Swings the exhaust sideways, in degrees. Limited to the maximum vector angle.)",
 }
+
+ENT.ACF_WireOutputs = {
+    "Max Thrust (The most this nozzle can ever give, in the same numbers as the Thrust input.)",
+    "Available Thrust (The most the engines linked to it can keep up, never above Max Thrust. Keep the Thrust input at or below this so the engine does not stall. You can ask for more, the engine just bogs down.)",
+    "Thrust Delivered (The thrust it is really giving right now.)",
+    "Diameter (The nozzle's diameter, in inches.)",
+    "Required Power (The engine power it needs for Max Thrust, in kW.)",
+    "Received Power (The engine power it is getting right now, in kW.)",
+    "Efficiency (How much of the engine power becomes thrust, in percent.)",
+}
 -- NOTE: do not put brackets inside these descriptions, Wire cuts the name at the LAST " (" of the text.
 
 cleanup.Register("acf_thrustnozzle")

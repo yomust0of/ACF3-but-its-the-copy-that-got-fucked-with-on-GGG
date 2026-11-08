@@ -11,9 +11,11 @@ include("shared.lua")
 --     a damaged gearbox and a weak engine all lower the thrust by themselves
 --   * you tell it how much thrust you want (a number like the GMod thruster tool's Force), it never goes over its own maximum
 --   * it loads the engine like a propeller (see tuning.lua), harder the more thrust it is asked for
+--   * it weighs between MassSmall and MassLarge kg depending on its diameter, and tells Wire what it can do (see shared.lua)
 -- Every number is in tuning.lua.
 
 local ACF         = ACF
+local Contraption = ACF.Contraption
 local Mobility    = ACF.Mobility
 local MobilityObj = Mobility.Objects
 local Sounds      = ACF.Utilities.Sounds
@@ -72,9 +74,16 @@ function ENT:ACF_PreSpawn()
 end
 
 function ENT:ACF_PostUpdateEntityData(ClientData)
+	-- The mass first forgotten, then set again once the model has its new size (resizing makes a new physics object). A mass left over from
+	-- before (from a dupe or an earlier size) would otherwise win when ACF checks the mass right after this.
+	duplicator.ClearEntityModifier(self, "mass")
 	self:SetScale(ClientData.Size)
 
 	local Diameter = ClientData.NozzleDiameter
+
+	if IsValid(self:GetPhysicsObject()) then
+		Contraption.SetMass(self, Tune.GetMass(Diameter))
+	end
 
 	self.Diameter = Diameter
 	self.MaxThrust, self.ThrustPerKW, self.RatedPower, self.Efficiency, self.SizeFraction = Tune.GetStats(Diameter)
@@ -92,10 +101,14 @@ function ENT:ACF_PostUpdateEntityData(ClientData)
 	self.VecYaw        = self.VecYaw or 0
 	self.Thrust        = self.Thrust or 0
 	self.TickThrust    = 0
+	self.TickPower     = 0
+	self.ReceivedPower = self.ReceivedPower or 0
+	self.LinkedPower   = self.LinkedPower or 0
 	self.ShaftRPM      = self.ShaftRPM or 0
 	self.NetRPM        = 0
 
 	self:UpdateVector()
+	self:UpdateOutputs()
 end
 
 ACF.RegisterClassLink("acf_thrustnozzle", "acf_gearbox", function(This, Gearbox)
@@ -238,6 +251,62 @@ local function GetHealthRatio(SelfTbl)
 	return math.Clamp(Data.Health / Data.MaxHealth, 0, 1)
 end
 
+-- The engine power (kW) that can reach this thruster: the engines linked to its gearboxes, and for gearboxes linked into each other
+-- the engines of the gearboxes before them. Each engine counts once. This is what the engines are built for, so a damaged engine can
+-- still give less than this.
+local function GetLinkedPower(SelfTbl)
+	local Power, Stack, Seen, Counted = 0, {}, {}, {}
+
+	for Gearbox in pairs(SelfTbl.Gearboxes) do
+		Stack[#Stack + 1] = Gearbox
+	end
+
+	while #Stack > 0 do
+		local Gearbox = table.remove(Stack)
+
+		if IsValid(Gearbox) and not Seen[Gearbox] then
+			Seen[Gearbox] = true
+
+			for Engine in pairs(Gearbox.Engines or {}) do
+				if IsValid(Engine) and not Counted[Engine] then
+					Counted[Engine] = true
+					Power = Power + (Engine.PeakPower or 0)
+				end
+			end
+
+			for Before in pairs(Gearbox.GearboxIn or {}) do
+				Stack[#Stack + 1] = Before
+			end
+		end
+	end
+
+	return Power
+end
+
+local function PowerText(KW)
+	KW = math.Round(KW)
+
+	return ("%d kW / %d hp"):format(KW, math.Round(KW * (ACF.KwToHp or 1.341)))
+end
+
+-- What the nozzle tells Wire. Wire only sends a value on when it has changed, so this costs next to nothing when nothing moves.
+function ENT:UpdateOutputs()
+	local SelfTbl = self:GetTable()
+
+	if not SelfTbl.MaxThrust then return end
+
+	local Medium    = SelfTbl.InWater and Tune.WaterMultiplier or 1
+	local Available = math.min(SelfTbl.MaxThrust, SelfTbl.LinkedPower * SelfTbl.ThrustPerKW * Medium)
+
+	WireLib.TriggerOutput(self, "Max Thrust", math.Round(SelfTbl.MaxThrust, 1))
+	WireLib.TriggerOutput(self, "Available Thrust", math.Round(Available, 1))
+	WireLib.TriggerOutput(self, "Thrust Delivered", math.Round(SelfTbl.Thrust or 0, 1))
+	WireLib.TriggerOutput(self, "Diameter", math.Round(SelfTbl.Diameter, 1))
+	WireLib.TriggerOutput(self, "Required Power", math.Round(SelfTbl.RatedPower / Medium, 1))
+	WireLib.TriggerOutput(self, "Received Power", math.Round(SelfTbl.ReceivedPower or 0, 1))
+	WireLib.TriggerOutput(self, "Efficiency", math.Round(SelfTbl.Efficiency * Medium * 100, 1))
+end
+
 ---------------------------------------------------------------------------------------------------------------
 -- Sound
 ---------------------------------------------------------------------------------------------------------------
@@ -331,12 +400,16 @@ function ENT:Act(Torque, DeltaTime)
 	if SelfTbl.TickTime ~= Now then
 		SelfTbl.TickTime   = Now
 		SelfTbl.TickThrust = 0
+		SelfTbl.TickPower  = 0
 	end
 
 	local Phys = SelfTbl.AncestorPhys
 
 	if IsValid(SelfTbl.Ancestor) and IsValid(Phys) then
-		local Thrust = math.abs(Torque) * RPM / 9548.8 * SelfTbl.ThrustPerKW * GetHealthRatio(SelfTbl) -- kW times thrust per kW
+		local Power  = math.abs(Torque) * RPM / 9548.8 -- kW the engine really delivered
+		local Thrust = Power * SelfTbl.ThrustPerKW * GetHealthRatio(SelfTbl)
+
+		SelfTbl.TickPower = SelfTbl.TickPower + Power
 
 		if SelfTbl.InWater then Thrust = Thrust * Tune.WaterMultiplier end
 
@@ -357,7 +430,8 @@ function ENT:Act(Torque, DeltaTime)
 		end
 	end
 
-	SelfTbl.Thrust = SelfTbl.TickThrust
+	SelfTbl.Thrust        = SelfTbl.TickThrust
+	SelfTbl.ReceivedPower = SelfTbl.TickPower
 
 	self:UpdateSound(SelfTbl)
 end
@@ -370,7 +444,8 @@ function ENT:Think()
 	if Now - (SelfTbl.LastAct or -1) > ActiveTime then
 		if SelfTbl.Sound then self:DestroySound() end
 
-		SelfTbl.Thrust = 0
+		SelfTbl.Thrust        = 0
+		SelfTbl.ReceivedPower = 0
 
 		if SelfTbl.NetRPM ~= 0 then
 			SelfTbl.NetRPM = 0
@@ -392,6 +467,9 @@ function ENT:Think()
 	UpdateGoal(SelfTbl)
 	RefreshLoad(SelfTbl)
 
+	SelfTbl.LinkedPower = GetLinkedPower(SelfTbl)
+
+	self:UpdateOutputs()
 	self:UpdateOverlay()
 	self:NextThink(CurTime() + 0.1)
 
@@ -403,10 +481,14 @@ function ENT:ACF_UpdateOverlayState(State)
 
 	if not SelfTbl.MaxThrust then return end
 
-	local Medium = SelfTbl.InWater and Tune.WaterMultiplier or 1
+	local Medium    = SelfTbl.InWater and Tune.WaterMultiplier or 1
+	local Available = math.min(SelfTbl.MaxThrust, (SelfTbl.LinkedPower or 0) * SelfTbl.ThrustPerKW * Medium)
 
 	State:AddKeyValue("Max Thrust", ("%d"):format(math.Round(SelfTbl.MaxThrust)))
-	State:AddKeyValue("Engine Power For Max Thrust", ("%d kW"):format(math.ceil(SelfTbl.RatedPower / Medium)))
+	State:AddKeyValue("Engine Power For Max Thrust", PowerText(math.ceil(SelfTbl.RatedPower / Medium)))
+	State:AddKeyValue("Linked Engine Power", PowerText(SelfTbl.LinkedPower or 0))
+	State:AddKeyValue("Available Thrust", ("%d"):format(math.Round(Available)))
+	State:AddKeyValue("Power Received", PowerText(SelfTbl.ReceivedPower or 0))
 	State:AddKeyValue("Wanted Thrust", ("%d"):format(math.Round(math.min(SelfTbl.WantedThrust, SelfTbl.MaxThrust))))
 	State:AddKeyValue("Thrust Now", ("%d"):format(math.Round(SelfTbl.Thrust or 0)))
 	State:AddKeyValue("Diameter", ("%s in"):format(math.Round(SelfTbl.Diameter, 1)))

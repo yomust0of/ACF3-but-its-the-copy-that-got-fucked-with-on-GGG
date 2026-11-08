@@ -19,8 +19,10 @@ Components.RegisterItem("TNZ-VTOL", "TNZ", {
 
 		local function ShowStats(Diameter)
 			local MaxThrust, _, RatedPower, Efficiency = Tune.GetStats(Diameter)
+			local KW = math.ceil(RatedPower)
 
-			Stats:SetText(("Max thrust: %d\nEngine power for max thrust: %d kW\nEfficiency: %d%%"):format(math.Round(MaxThrust), math.ceil(RatedPower), math.Round(Efficiency * 100)))
+			Stats:SetText(("Max thrust: %d\nEngine power for max thrust: %d kW / %d hp\nEfficiency: %d%%\nWeight: %s kg"):format(
+				math.Round(MaxThrust), KW, math.Round(KW * ACF.KwToHp), math.Round(Efficiency * 100), Tune.GetMass(Diameter)))
 		end
 
 		-- Our own slider: the nozzle's diameter, in inches. The thrust it can give grows with the area of that circle.
@@ -55,5 +57,6 @@ Components.RegisterItem("TNZ-VTOL", "TNZ", {
 
 		Menu:AddHelp("The sound file the thruster plays, relative to the game's sound folder. Leave it empty for no sound. What you type here is remembered between games. Volume and pitch are set with the ACF sound tool; the thrust changes them as it goes.")
 		Menu:AddHelp("Link it to a gearbox like a waterjet. Wire a number into Thrust to say how much you want; Slew, Pitch and Yaw are optional.")
+		Menu:AddHelp("Wire outputs: Available Thrust is the most the linked engines can keep up, so keep Thrust at or below it to not stall the engine. Thrust Delivered is what it really gives. Max Thrust, Diameter, Required Power, Received Power and Efficiency are there too.")
 	end
 })

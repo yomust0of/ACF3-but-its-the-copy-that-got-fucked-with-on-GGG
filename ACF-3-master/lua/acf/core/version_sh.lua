@@ -8,6 +8,15 @@ ACF.Edition        = "GGG acf3 freedom edition"
 ACF.EditionDisplay = 'GGG ACF3 "Freedom Edition"'
 ACF.EditionBranch  = "beta"
 
+-- The version number of this copy, and where the newest one lives. The chat notice below reads the same number out of version_sh.lua on GitHub
+-- and tells the player if theirs is behind. To publish a new version: raise this number by one, then push. (Do not write the number anywhere
+-- else in this file in the same "name = digits" form, the check takes the first one it finds.)
+ACF.EditionVersion    = 13
+ACF.EditionRepo       = "yomust0of/ACF3-but-its-the-copy-that-got-fucked-with-on-GGG"
+ACF.EditionRepoBranch = "main"
+ACF.EditionRepoFolder = "ACF-3-master" -- the folder inside the repository that holds lua/, the one that is renamed and put in addons
+ACF.EditionRepoURL    = "https://github.com/" .. ACF.EditionRepo
+
 --- Converts a local time to UTC for comparison
 local function LocalToUTC(time)
 	return os.time(os.date("!*t", time)) or 0 -- WHY WOULD IT EVER BE NIL :(
@@ -196,10 +205,12 @@ ACF.AddRepository("ACF-Team", "ACF-3")
 -- Marks this copy as the freedom edition. Everything in ACF.Extensions is sent to clients below, so a client can tell what the server runs.
 ACF.Extensions["ACF-3"].Edition       = ACF.Edition
 ACF.Extensions["ACF-3"].EditionBranch = ACF.EditionBranch
+ACF.Extensions["ACF-3"].EditionVersion = ACF.EditionVersion
 
 -- Upstream asked api.github.com for the newest ACF-3 commit when the server started and told players in chat if they or the server were
--- out of date. That is removed here: no web request is made and no "out of date" chat notice exists. The notice at the bottom replaces it.
--- ACF.GetLatestCommit / ACF.GetCommit above are kept, unused, for pointing at our own repository once it is public.
+-- out of date. That is removed here: the server makes no web request. The notice at the bottom replaces it, and it asks this edition's own
+-- repository (ACF.EditionRepo) instead, from the player's game, once per session.
+-- ACF.GetLatestCommit / ACF.GetCommit above are kept, unused.
 
 -- Realm specific stuff (so small it probably doesn't need to be in separate files)
 if SERVER then
@@ -223,6 +234,53 @@ elseif CLIENT then
 		return string.sub(tostring(Value), 1, 60)
 	end
 
+	-- The newest version number on GitHub: nil until the answer is in, false when it could not be had, 0 when the file there has no version
+	-- number yet (a copy from before this check existed), otherwise the number. One small request per session; nothing is sent but the address.
+	local Latest
+
+	local function CheckLatestVersion()
+		if not (http and http.Fetch) then Latest = false return end
+
+		local Url = ("https://raw.githubusercontent.com/%s/%s/%s/lua/acf/core/version_sh.lua"):format(ACF.EditionRepo, ACF.EditionRepoBranch, ACF.EditionRepoFolder)
+
+		http.Fetch(Url,
+			function(Body, _, _, Code)
+				if Code ~= 200 or not isstring(Body) then Latest = false return end
+
+				-- Only the top of the file is looked at, and only a short run of digits is taken from it (anything else counts as no number)
+				local Digits = string.match(string.sub(Body, 1, 3000), "ACF%.EditionVersion%s*=%s*(%d+)")
+
+				Latest = Digits and #Digits <= 6 and tonumber(Digits) or 0
+			end,
+			function() Latest = false end)
+	end
+
+	-- What the notice says about versions: yours against the newest on GitHub, then the server's
+	local function PrintVersionLines(Messages, Server)
+		local Mine = ACF.EditionVersion
+
+		if Latest == false or Latest == nil then
+			Messages.PrintChat("Info", "Could not check GitHub for a newer version. " .. ACF.EditionRepoURL)
+		elseif Mine < Latest then
+			Messages.PrintChat("Warning", "A newer version is on GitHub: yours is version " .. Mine .. ", the newest is version " .. Latest .. ". Get it at " .. ACF.EditionRepoURL)
+		elseif Mine == Latest then
+			Messages.PrintChat("Info", "Your copy is version " .. Mine .. ", the same as the newest on GitHub.")
+		else
+			Messages.PrintChat("Info", "Your copy is version " .. Mine .. ", newer than the one on GitHub (" .. (Latest > 0 and ("version " .. Latest) or "it has no version number yet") .. ").")
+		end
+
+		-- The server's own number, only when it runs this edition and sent one
+		local Theirs = istable(Server) and Server.Edition == ACF.Edition and isnumber(Server.EditionVersion) and Server.EditionVersion
+
+		if Theirs then
+			if isnumber(Latest) and Latest > 0 and Theirs < Latest then
+				Messages.PrintChat("Info", "The server's copy is version " .. Clean(Theirs) .. ", which is behind the newest (version " .. Latest .. ").")
+			elseif Theirs ~= Mine then
+				Messages.PrintChat("Info", "The server's copy is version " .. Clean(Theirs) .. " (yours is " .. Mine .. ").")
+			end
+		end
+	end
+
 	-- Tells the player once, in chat: that they have this edition, whether the server has it too, and which ACF branch the server is on.
 	local function PrintEditionNotice()
 		local Messages = ACF.Utilities.Messages
@@ -232,6 +290,7 @@ elseif CLIENT then
 
 		if not istable(Server) then
 			Messages.PrintChat("Info", "The server did not send any ACF version info, so it does not have it installed. Its branch is unknown.")
+			PrintVersionLines(Messages)
 			return
 		end
 
@@ -255,16 +314,21 @@ elseif CLIENT then
 		else
 			Messages.PrintChat("Info", "The server's ACF branch could not be told (it is not a git install).")
 		end
+
+		PrintVersionLines(Messages, Server)
 	end
 
 	-- Shown on the player's first key press, the same moment the old out-of-date notice used, so the chat is actually on screen.
-	-- It waits up to 10 seconds for the server's info; a server that never sends any is reported as such.
+	-- It waits up to 10 seconds for the server's info and for GitHub's answer; a server that never sends any is reported as such, and a GitHub
+	-- that does not answer in time as "could not check".
 	hook.Add("InitPostEntity", "ACF Edition Notice", function()
 		local Start = SysTime()
 
+		CheckLatestVersion()
+
 		hook.Add("CreateMove", "ACF Edition Notice", function(Move)
 			if Move:GetButtons() == 0 then return end
-			if not ACF.ServerExtensions and SysTime() - Start < 10 then return end
+			if (not ACF.ServerExtensions or Latest == nil) and SysTime() - Start < 10 then return end
 
 			hook.Remove("CreateMove", "ACF Edition Notice")
 			PrintEditionNotice()

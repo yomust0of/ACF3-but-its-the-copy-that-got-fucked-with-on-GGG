@@ -15,38 +15,50 @@ ACF.ThrustNozzle = Tune
 ---------------------------------------------------------------------------------------------------------------
 -- SIZE: the diameter slider in the menu, in inches (source units)
 ---------------------------------------------------------------------------------------------------------------
-Tune.DiameterMin     = 10    -- PLACEHOLDER. Smallest nozzle you can make
-Tune.DiameterMax     = 60    -- PLACEHOLDER. Largest nozzle you can make. This one gets the full ThrustCeiling below
+Tune.DiameterMin     = 6     -- Smallest nozzle you can make. Gets EfficiencySmall and MassSmall
+Tune.DiameterMax     = 40    -- Largest nozzle you can make. Gets EfficiencyLarge and MassLarge
 Tune.DiameterDefault = 30    -- What the slider starts on
-Tune.ModelDiameter   = 10    -- How wide hover_propeller.mdl is at scale 1 (ACF's waterjet says 10). Only used to scale the model
+Tune.ModelDiameter   = 17.66 -- How wide hover_propeller.mdl really is at scale 1 (measured in game), so a nozzle set to 10 is 10 wide. Only used to scale the model
+
+-- The nozzle's weight, in kg: MassSmall for the smallest nozzle and MassLarge for the biggest, and in between it grows the way
+-- the thrust does (about with the square of the diameter): a straight line on a log-log graph between the two.
+Tune.MassSmall = 30
+Tune.MassLarge = 1000
 
 Tune.EntityLimit     = 50    -- How many a player can have (sbox_max_acf_thrustnozzle; a server can still change that console variable)
 
 ---------------------------------------------------------------------------------------------------------------
 -- THRUST
 ---------------------------------------------------------------------------------------------------------------
--- How hard GMod pushes for a thrust number N. GMod's thruster tool pushes with 50 x N, in kg * inch / s^2, and so does this.
--- UNCONFIRMED until the calibration script (thrust_calibration.lua) has been run in game. If it prints a "force factor" other
--- than 50, put that number here.
+-- How hard the push is for a thrust number N, in kg * inch / s^2 per unit of N. A sandbox thruster's push depends on its model (a
+-- bigger model pushes harder for the same Force; measured with the calibration scripts: 1198.75 for a 48 inch cube, 308 for
+-- thruster.mdl, 57 for jaanus/thruster_flat.mdl). This one number decides how hard every nozzle pushes, whatever its size.
+-- 1198.75 (the 48 inch cube's push) is the owner's choice, set by feel in game; it is not tested against and is not changed by anything else.
 Tune.ForceFactor = 1198.75
 
--- The biggest thrust a nozzle can ever give, for the biggest nozzle (DiameterMax). A smaller nozzle gets this times (its
--- diameter / DiameterMax)^2, which is its share of the area: twice as wide = four times the thrust.
-Tune.ThrustCeiling = 75000
+-- The yardstick for how thrust and power scale: a nozzle ReferenceDiameter wide, running at 100 percent efficiency, gives
+-- ThrustCeiling from CeilingPowerKW of engine power. No nozzle that wide can be built any more (the biggest is DiameterMax); these
+-- three numbers only fix the scale, so changing DiameterMax or the efficiency does not move them. A nozzle of any diameter gets
+-- ThrustCeiling x (diameter / ReferenceDiameter)^2, its share of the area: twice as wide = four times the thrust.
+Tune.ReferenceDiameter = 60
+Tune.ThrustCeiling     = 75000
 
--- How much engine power makes ThrustCeiling at the biggest nozzle with nothing wasted. 1082 kW is the strongest engine in ACF
--- (the Large Gas Turbine; the next ones are 1021, 625, 522 and 261 kW, all counted the way ACF counts power for the engine
--- menu's graph, without the server's torque multiplier). Thrust per kW is ThrustCeiling / CeilingPowerKW = 69.3.
+-- 1082 kW is the strongest engine in ACF (the Large Gas Turbine; the next ones are 1021, 625, 522 and 261 kW, all counted the way
+-- ACF counts power for the engine menu's graph, without the server's torque multiplier). Thrust per kW at 100 percent efficiency
+-- is ThrustCeiling / CeilingPowerKW = 69.3.
 Tune.CeilingPowerKW = 1082
 
 -- Overall thrust per engine power, as a plain multiplier: 2 gives every nozzle twice the thrust for the same engine power
 -- (and, because the nozzle never gives more than its own maximum, it also means the engine has to work less hard to reach it).
+-- 0.29 is the owner's choice: it felt right for a 10 inch nozzle on a small gas turbine under a 2500 kg baseplate. At this value the
+-- 40 inch nozzle (33333 thrust) needs about 2210 kW, two Large Gas Turbines.
 Tune.ThrustPerPowerScale = 0.29
 
 -- Small nozzles waste more of the engine's power than big ones: the thrust you get per kW is multiplied by this, 0.5 for the
--- smallest nozzle (DiameterMin) up to 1.0 for the largest (DiameterMax), straight line in between. PLACEHOLDER.
+-- smallest nozzle (DiameterMin) up to 0.75 for the largest (DiameterMax), straight line in between. At 0.75 the biggest nozzle
+-- needs two thirds of the power of the smallest for the same thrust. PLACEHOLDER.
 Tune.EfficiencySmall = 0.5
-Tune.EfficiencyLarge = 1.0
+Tune.EfficiencyLarge = 0.75
 
 -- Under water the same power gives this much of the thrust: 0.7 = 30 percent less. It still works.
 Tune.WaterMultiplier = 0.7
@@ -112,8 +124,21 @@ function Tune.GetStats(Diameter)
 	local Span       = Tune.DiameterMax - Tune.DiameterMin
 	local Size       = Span > 0 and math.Clamp((Diameter - Tune.DiameterMin) / Span, 0, 1) or 1
 	local Efficiency = Tune.EfficiencySmall + (Tune.EfficiencyLarge - Tune.EfficiencySmall) * Size
-	local MaxThrust  = Tune.ThrustCeiling * (Diameter / Tune.DiameterMax) ^ 2
+	local MaxThrust  = Tune.ThrustCeiling * (Diameter / Tune.ReferenceDiameter) ^ 2
 	local PerKW      = Tune.ThrustCeiling / Tune.CeilingPowerKW * Tune.ThrustPerPowerScale * Efficiency
 
 	return MaxThrust, PerKW, MaxThrust / PerKW, Efficiency, Size
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- The nozzle's weight in kg for one diameter (see MassSmall / MassLarge above)
+---------------------------------------------------------------------------------------------------------------
+function Tune.GetMass(Diameter)
+	local Min, Max = Tune.DiameterMin, Tune.DiameterMax
+
+	if Max <= Min or Min <= 0 then return Tune.MassLarge end
+
+	local Along = math.log(math.Clamp(Diameter, Min, Max) / Min) / math.log(Max / Min) -- 0 at the smallest, 1 at the biggest
+
+	return math.Round(Tune.MassSmall * (Tune.MassLarge / Tune.MassSmall) ^ Along, 1)
 end
