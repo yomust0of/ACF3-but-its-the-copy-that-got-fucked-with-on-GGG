@@ -28,7 +28,7 @@ Tune.EntityLimit     = 50    -- How many a player can have (sbox_max_acf_thrustn
 -- How hard GMod pushes for a thrust number N. GMod's thruster tool pushes with 50 x N, in kg * inch / s^2, and so does this.
 -- UNCONFIRMED until the calibration script (thrust_calibration.lua) has been run in game. If it prints a "force factor" other
 -- than 50, put that number here.
-Tune.ForceFactor = 50
+Tune.ForceFactor = 1198.75
 
 -- The biggest thrust a nozzle can ever give, for the biggest nozzle (DiameterMax). A smaller nozzle gets this times (its
 -- diameter / DiameterMax)^2, which is its share of the area: twice as wide = four times the thrust.
@@ -41,7 +41,7 @@ Tune.CeilingPowerKW = 1082
 
 -- Overall thrust per engine power, as a plain multiplier: 2 gives every nozzle twice the thrust for the same engine power
 -- (and, because the nozzle never gives more than its own maximum, it also means the engine has to work less hard to reach it).
-Tune.ThrustPerPowerScale = 1
+Tune.ThrustPerPowerScale = 0.2273
 
 -- Small nozzles waste more of the engine's power than big ones: the thrust you get per kW is multiplied by this, 0.5 for the
 -- smallest nozzle (DiameterMin) up to 1.0 for the largest (DiameterMax), straight line in between. PLACEHOLDER.
@@ -77,7 +77,7 @@ Tune.FallbackRefRPM = 7000
 ---------------------------------------------------------------------------------------------------------------
 -- VECTORING AND THRUST SLEW
 ---------------------------------------------------------------------------------------------------------------
-Tune.MaxVectorAngle = 30     -- Most the thrust can be tilted away from the nozzle's axis, in degrees (a cone, not a square)
+Tune.MaxVectorAngle = 30     -- Most the Pitch and Yaw angles can add up to, in degrees (if they would pass it, both are scaled down together)
 
 -- Which way the push goes along the model's up axis. -1 = the same as ACF's waterjet (pushes along the model's down). If your
 -- thruster pushes the wrong way when you place it, change this to 1.

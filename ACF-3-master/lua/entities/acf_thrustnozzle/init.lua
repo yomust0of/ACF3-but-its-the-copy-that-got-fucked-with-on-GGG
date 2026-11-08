@@ -154,26 +154,21 @@ ACF.AddInputAction("acf_thrustnozzle", "Yaw", function(Entity, Value)
 	Entity:UpdateVector()
 end)
 
--- Works out which way the push goes, in the thruster's own frame. The two wire angles tilt it away from the nozzle's axis; the tilt
--- is limited to MaxVectorAngle (a cone: pitch and yaw together never tilt it further than that).
--- Pitch tilts it forwards or back (the same as turning the model by that pitch angle), Yaw tilts it sideways (the same as its roll angle).
+-- Works out the two angles that tilt the push away from the nozzle's axis, the same two angles the waterjet uses (Pitch as the pitch
+-- angle, Yaw as the roll angle). Together they are limited to MaxVectorAngle (pitch and yaw each scaled down the same amount).
 -- UNCONFIRMED in game: which way is "forward" for the plus sign depends on how the model is built.
 function ENT:UpdateVector()
 	local Max   = Tune.MaxVectorAngle
 	local Pitch = self.VecPitch
 	local Yaw   = self.VecYaw
 	local Total = math.sqrt(Pitch * Pitch + Yaw * Yaw)
-	local Dir   = Tune.ThrustDirection
 
-	if Total < 1e-6 then
-		self.LocalDir = Vector(0, 0, Dir)
-		return
+	if Total > Max then
+		Pitch = Pitch * Max / Total
+		Yaw   = Yaw * Max / Total
 	end
 
-	local Tilt = math.rad(math.min(Total, Max))
-	local Side = math.sin(Tilt) / Total -- turns the two wire angles into the sideways parts of a unit direction
-
-	self.LocalDir = Vector(Pitch * Side * Dir, -Yaw * Side * Dir, math.cos(Tilt) * Dir)
+	self.TiltAng = Angle(Pitch, 0, Yaw)
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -354,7 +349,11 @@ function ENT:Act(Torque, DeltaTime)
 			-- A push is an impulse: the force (ForceFactor times the thrust number) for as long as this tick covers
 			local Impulse = Tune.ForceFactor * Thrust * math.min(DeltaTime or 0, Tune.MaxStep)
 
-			Phys:ApplyForceOffset(self:LocalToWorldVector(SelfTbl.LocalDir) * Impulse, self:GetPos())
+			-- Which way it pushes: exactly how the waterjet does it. The thruster's own up axis, tilted by the two angles, in world space
+			-- (ThrustDirection -1 is the waterjet's minus sign).
+			local Dir = self:LocalToWorldAngles(SelfTbl.TiltAng):Up() * Tune.ThrustDirection
+
+			Phys:ApplyForceOffset(Dir * Impulse, self:GetPos())
 		end
 	end
 
