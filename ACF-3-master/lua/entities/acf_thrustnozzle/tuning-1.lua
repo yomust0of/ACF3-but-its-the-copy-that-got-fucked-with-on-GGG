@@ -41,7 +41,7 @@ Tune.CeilingPowerKW = 1082
 
 -- Overall thrust per engine power, as a plain multiplier: 2 gives every nozzle twice the thrust for the same engine power
 -- (and, because the nozzle never gives more than its own maximum, it also means the engine has to work less hard to reach it).
-Tune.ThrustPerPowerScale = 0.2273
+Tune.ThrustPerPowerScale = 0.29
 
 -- Small nozzles waste more of the engine's power than big ones: the thrust you get per kW is multiplied by this, 0.5 for the
 -- smallest nozzle (DiameterMin) up to 1.0 for the largest (DiameterMax), straight line in between. PLACEHOLDER.
